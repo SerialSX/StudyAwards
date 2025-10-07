@@ -70,6 +70,25 @@ app.get('/usuarios/:id/pontuacao', (req, res) => {
   });
 });
 
+// --- NOVA ROTA DE RANKING ADICIONADA AQUI ---
+app.get('/ranking', (req, res) => {
+  const sql = `
+    SELECT nome, pontuacao_total 
+    FROM usuarios 
+    ORDER BY pontuacao_total DESC 
+    LIMIT 10`;
+
+  // db.all() busca por todas as linhas que correspondem à consulta
+  db.all(sql, [], (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    // Retorna a lista de usuários (ranking)
+    res.json(rows);
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
