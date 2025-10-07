@@ -8,66 +8,64 @@ const app = express();
 // Definir a porta
 const PORT = 3000;
 
-// --- NOVO CÓDIGO DO BANCO DE DADOS ---
+// --- CONEXÃO COM O BANCO DE DADOS ---
 
-// Conectar ao banco de dados SQLite
-// Se o arquivo 'banco.db' não existir, ele será criado.
 const db = new sqlite3.Database('./banco.db', (err) => {
   if (err) {
-    // Erro ao conectar
     console.error("Erro ao conectar ao banco de dados:", err.message);
   } else {
-    // Conexão bem-sucedida
     console.log("Conectado ao banco de dados 'banco.db' com sucesso.");
     
-    // Criar a tabela de usuários (se ela não existir)
-    // Usamos 'db.run' para executar comandos SQL que não retornam dados
+    // Cria a tabela 'usuarios' se não existir
     db.run(`CREATE TABLE IF NOT EXISTS usuarios (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nome TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       senha TEXT NOT NULL,
-      tipo TEXT NOT NULL
+      tipo TEXT NOT NULL,
+      pontuacao_total INTEGER DEFAULT 0
     )`, (err) => {
       if (err) {
-        // Erro ao criar a tabela
         console.error("Erro ao criar a tabela 'usuarios':", err.message);
       } else {
-        // Tabela criada ou já existente
         console.log("Tabela 'usuarios' pronta para uso.");
       }
     });
   }
 });
 
-// --- FIM DO NOVO CÓDIGO ---
-
+// --- ROTAS ---
 
 // Rota de teste
 app.get('/', (req, res) => {
   res.send('Servidor funcionando e conectado ao banco de dados!');
 });
 
-// --- NOVA ROTA ADICIONADA AQUI ---
-// Rota para buscar a pontuação de um usuário (exemplo)
-// No navegador, acesse: http://localhost:3000/usuarios/1/pontuacao
+// Rota para buscar a pontuação real de um usuário no banco
 app.get('/usuarios/:id/pontuacao', (req, res) => {
   const usuarioId = req.params.id;
 
-  // POR ENQUANTO: Retornamos um valor fixo (mockado)
-  // NO FUTURO: Aqui buscaremos no banco de dados de verdade usando o usuarioId
-  const pontuacaoMockada = 150;
-
-  // Enviamos a resposta em formato JSON
-  res.json({
-    usuarioId: usuarioId,
-    pontuacao: pontuacaoMockada
-  });
+  db.get(
+    `SELECT nome, pontuacao_total FROM usuarios WHERE id = ?`,
+    [usuarioId],
+    (err, row) => {
+      if (err) {
+        console.error("Erro ao buscar pontuação:", err.message);
+        res.status(500).json({ erro: "Erro interno do servidor." });
+      } else if (!row) {
+        res.status(404).json({ erro: "Usuário não encontrado." });
+      } else {
+        res.json({
+          id: usuarioId,
+          nome: row.nome,
+          pontuacao_total: row.pontuacao_total
+        });
+      }
+    }
+  );
 });
-// --- FIM DA NOVA ROTA ---
 
-
-// Iniciar o servidor
+// --- INICIAR SERVIDOR ---
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
