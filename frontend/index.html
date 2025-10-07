@@ -11,6 +11,14 @@
 </head>
 <body>
 
+    <div id="reward-popup-overlay" class="hidden">  <div id="reward-popup">
+            <h2>🎉 Nova Recompensa! 🎉</h2>
+            <p>Você ganhou:</p>
+            <h3 id="reward-name">Nome da Recompensa</h3>
+            <p id="reward-desc">Descrição da recompensa...</p>
+            <button id="close-popup-btn">Ok!</button> </div>
+    </div>
+
     <div class="profile-card">
         <div class="card-header">
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-user"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
@@ -20,6 +28,7 @@
             <p>Pontuação Total: <span id="user-score">Carregando...</span></p>
         </div>
         <a href="ranking/ranking.html" class="nav-link">Ver Ranking →</a>
+        <button id="add-score-btn" class="task-button">Simular Tarefa (+50 pts)</button>
     </div>
 
     <script src="script.js"></script>

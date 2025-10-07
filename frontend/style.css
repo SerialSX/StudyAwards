@@ -19,6 +19,7 @@ body {
     text-align: center;
     width: 320px;
     transition: all 0.3s ease;
+    z-index: 10;
 }
 
 .profile-card:hover {
@@ -64,7 +65,7 @@ h1 {
     margin-left: 8px;
 }
 
-/* --- Novos Estilos do Ranking (ranking.html) --- */
+/* --- Estilos do Ranking (ranking.html) --- */
 
 .ranking-container {
     background-color: white;
@@ -131,4 +132,64 @@ h1 {
 
 .nav-link:hover, .back-link:hover {
     text-decoration: underline;
+}
+
+/* --- NOVOS ESTILOS DO POP-UP DE RECOMPENSA --- */
+
+#reward-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+#reward-popup {
+    background-color: white;
+    padding: 30px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+    width: 90%;
+    max-width: 400px;
+}
+
+#reward-popup h2 {
+    margin-top: 0;
+    color: #333;
+}
+
+#reward-popup h3 {
+    color: #4a90e2;
+    margin: 10px 0;
+}
+
+#reward-popup p {
+    color: #606770;
+}
+
+#close-popup-btn {
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 20px;
+    transition: background-color 0.2s ease;
+}
+
+#close-popup-btn:hover {
+    background-color: #357ABD;
+}
+
+.hidden {
+    display: none;
 }
