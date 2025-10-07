@@ -1,0 +1,62 @@
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f0f2f5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.profile-card {
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    padding: 28px;
+    text-align: center;
+    width: 320px;
+    transition: all 0.3s ease;
+}
+
+.profile-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.card-header svg {
+    color: #555;
+}
+
+h1 {
+    margin: 0;
+    font-size: 24px;
+    color: #333;
+}
+
+.score-container {
+    margin-top: 20px;
+    background-color: #fafafa;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.score-container p {
+    font-size: 18px;
+    color: #606770;
+    margin: 0;
+}
+
+#user-score {
+    font-size: 20px;
+    font-weight: 600;
+    color: #4a90e2;
+    margin-left: 8px;
+}
