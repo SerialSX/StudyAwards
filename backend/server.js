@@ -1,16 +1,16 @@
-// 1. Importar os pacotes
+// Importar os pacotes
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose(); // .verbose() nos dá mais informações no console
 
-// 2. Criar a aplicação Express
+// Criar a aplicação Express
 const app = express();
 
-// 3. Definir a porta
+// Definir a porta
 const PORT = 3000;
 
 // --- NOVO CÓDIGO DO BANCO DE DADOS ---
 
-// 4. Conectar ao banco de dados SQLite
+// Conectar ao banco de dados SQLite
 // Se o arquivo 'banco.db' não existir, ele será criado.
 const db = new sqlite3.Database('./banco.db', (err) => {
   if (err) {
@@ -20,7 +20,7 @@ const db = new sqlite3.Database('./banco.db', (err) => {
     // Conexão bem-sucedida
     console.log("Conectado ao banco de dados 'banco.db' com sucesso.");
     
-    // 5. Criar a tabela de usuários (se ela não existir)
+    // Criar a tabela de usuários (se ela não existir)
     // Usamos 'db.run' para executar comandos SQL que não retornam dados
     db.run(`CREATE TABLE IF NOT EXISTS usuarios (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +47,25 @@ const db = new sqlite3.Database('./banco.db', (err) => {
 app.get('/', (req, res) => {
   res.send('Servidor funcionando e conectado ao banco de dados!');
 });
+
+// --- NOVA ROTA ADICIONADA AQUI ---
+// Rota para buscar a pontuação de um usuário (exemplo)
+// No navegador, acesse: http://localhost:3000/usuarios/1/pontuacao
+app.get('/usuarios/:id/pontuacao', (req, res) => {
+  const usuarioId = req.params.id;
+
+  // POR ENQUANTO: Retornamos um valor fixo (mockado)
+  // NO FUTURO: Aqui buscaremos no banco de dados de verdade usando o usuarioId
+  const pontuacaoMockada = 150;
+
+  // Enviamos a resposta em formato JSON
+  res.json({
+    usuarioId: usuarioId,
+    pontuacao: pontuacaoMockada
+  });
+});
+// --- FIM DA NOVA ROTA ---
+
 
 // Iniciar o servidor
 app.listen(PORT, () => {
