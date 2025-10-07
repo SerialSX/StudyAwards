@@ -65,6 +65,80 @@ app.get('/usuarios/:id/pontuacao', (req, res) => {
   );
 });
 
+// Rota para buscar o ranking completo de pontuação
+app.get('/ranking', (req, res) => {
+  const query = `
+    SELECT nome, pontuacao_total
+    FROM usuarios
+    ORDER BY pontuacao_total DESC
+  `;
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      console.error("Erro ao buscar ranking:", err.message);
+      res.status(500).json({ erro: "Erro interno do servidor." });
+    } else if (rows.length === 0) {
+      res.status(404).json({ mensagem: "Nenhum usuário encontrado." });
+    } else {
+      // Adiciona a posição (1º, 2º, 3º...) para cada usuário
+      const ranking = rows.map((usuario, index) => ({
+        posicao: index + 1,
+        nome: usuario.nome,
+        pontuacao_total: usuario.pontuacao_total
+      }));
+
+      res.json(ranking);
+    }
+  });
+});
+
+// Rota para adicionar (ou atualizar) a pontuação de um usuário
+app.post('/usuarios/:id/pontuacao', express.json(), (req, res) => {
+  const usuarioId = req.params.id;
+  const { pontos } = req.body; // Exemplo: { "pontos": 50 }
+
+  if (typeof pontos !== 'number') {
+    return res.status(400).json({ erro: "Campo 'pontos' deve ser um número." });
+  }
+
+  // Atualiza a pontuação total
+  const query = `
+    UPDATE usuarios
+    SET pontuacao_total = pontuacao_total + ?
+    WHERE id = ?
+  `;
+
+  db.run(query, [pontos, usuarioId], function (err) {
+    if (err) {
+      console.error("Erro ao atualizar pontuação:", err.message);
+      res.status(500).json({ erro: "Erro interno do servidor." });
+    } else if (this.changes === 0) {
+      res.status(404).json({ erro: "Usuário não encontrado." });
+    } else {
+      // Busca a nova pontuação atualizada
+      db.get(
+        `SELECT nome, pontuacao_total FROM usuarios WHERE id = ?`,
+        [usuarioId],
+        (err, row) => {
+          if (err) {
+            console.error("Erro ao buscar pontuação atualizada:", err.message);
+            res.status(500).json({ erro: "Erro ao buscar dados atualizados." });
+          } else {
+            res.json({
+              mensagem: "Pontuação atualizada com sucesso!",
+              id: usuarioId,
+              nome: row.nome,
+              pontuacao_total: row.pontuacao_total
+            });
+          }
+        }
+      );
+    }
+  });
+});
+
+
+
 // --- INICIAR SERVIDOR ---
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
