@@ -95,6 +95,51 @@ const db = new sqlite3.Database('./banco.db', (err) => {
         });
     });
 
+// Rota para verificar e aplicar penalidades por tarefas atrasadas
+app.get('/verificar-atrasos', (req, res) => {
+    const sqlBuscaAtrasos = `
+        SELECT 
+            ad.id as aluno_desafio_id,
+            ad.aluno_id,
+            d.titulo as desafio_titulo
+        FROM aluno_desafios ad
+        JOIN desafios d ON ad.desafio_id = d.id
+        WHERE ad.status = 'pendente' AND d.prazo_final < DATE('now')
+    `;
+
+    db.all(sqlBuscaAtrasos, [], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: `Erro ao buscar tarefas atrasadas: ${err.message}` });
+        }
+        if (rows.length === 0) {
+            return res.json({ message: "Nenhuma tarefa atrasada encontrada." });
+        }
+
+        let penalidadesAplicadas = 0;
+        rows.forEach(tarefa => {
+            const pontosDeduzidos = 20; // Penalidade fixa por atraso
+            // --- ESTA É A LINHA DA CORREÇÃO PRINCIPAL ---
+            const motivo = `Atraso na entrega do desafio: ${tarefa.desafio_titulo}`;
+            const dataAtual = new Date().toISOString();
+
+            db.serialize(() => {
+                const sqlPenalidade = `INSERT INTO penalidades (aluno_id, motivo, pontos_deduzidos, data) VALUES (?, ?, ?, ?)`;
+                db.run(sqlPenalidade, [tarefa.aluno_id, motivo, pontosDeduzidos, dataAtual]);
+
+                const sqlPontuacao = `UPDATE usuarios SET pontuacao_total = pontuacao_total - ? WHERE id = ?`;
+                db.run(sqlPontuacao, [pontosDeduzidos, tarefa.aluno_id]);
+
+                const sqlStatusDesafio = `UPDATE aluno_desafios SET status = 'atrasado' WHERE id = ?`;
+                db.run(sqlStatusDesafio, [tarefa.aluno_desafio_id]);
+                
+                penalidadesAplicadas++;
+            });
+        });
+
+        res.json({ message: `Verificação concluída. ${penalidadesAplicadas} penalidade(s) aplicada(s).` });
+    });
+});
+
     // --- INICIAR SERVIDOR ---
     // MODIFICAÇÃO 2 (continuação): O servidor só liga aqui no final, garantindo que tudo está pronto.
     app.listen(PORT, () => {
