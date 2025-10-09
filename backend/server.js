@@ -92,6 +92,29 @@ app.get('/ranking', (req, res) => {
   });
 });
 
+// Rota para buscar o ranking de usuários
+app.get('/ranking', (req, res) => {
+  const sql = `
+    SELECT id, nome, pontuacao_total 
+    FROM usuarios 
+    ORDER BY pontuacao_total DESC
+  `;
+
+  // db.all busca por TODAS as linhas que correspondem à consulta
+  db.all(sql, [], (err, rows) => {
+    if (err) {
+      // Se der erro no banco de dados, retorna um erro 500
+      console.error("Erro ao buscar o ranking:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+    
+    // Se a consulta funcionou, retorna a lista de usuários em formato JSON
+    res.json({
+      ranking: rows
+    });
+  });
+});
+
 // Rota para adicionar (ou atualizar) a pontuação de um usuário
 app.post('/usuarios/:id/pontuacao', express.json(), (req, res) => {
   const usuarioId = req.params.id;
