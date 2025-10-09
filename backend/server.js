@@ -1,184 +1,104 @@
 // Importar os pacotes
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose(); // .verbose() nos dá mais informações no console
+const sqlite3 = require('sqlite3').verbose();
 
 // Criar a aplicação Express
 const app = express();
 
+// --- ADIÇÃO 1: Habilitar o Servidor para Receber JSON ---
+app.use(express.json());
+
 // Definir a porta
 const PORT = 3000;
 
-// --- CONEXÃO COM O BANCO DE DADOS ---
-
+// --- MODIFICAÇÃO 2: A estrutura inteira foi movida para DENTRO da conexão ---
 const db = new sqlite3.Database('./banco.db', (err) => {
   if (err) {
     console.error("Erro ao conectar ao banco de dados:", err.message);
   } else {
     console.log("Conectado ao banco de dados 'banco.db' com sucesso.");
     
-    // Cria a tabela 'usuarios' se não existir
-    db.run(`CREATE TABLE IF NOT EXISTS usuarios (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      senha TEXT NOT NULL,
-      tipo TEXT NOT NULL,
-      pontuacao_total INTEGER DEFAULT 0
-    )`, (err) => {
-      if (err) {
-        console.error("Erro ao criar a tabela 'usuarios':", err.message);
-      } else {
-        console.log("Tabela 'usuarios' pronta para uso.");
-      }
+    // --- ADIÇÃO 4: Garantir que TODAS as tabelas existam em ordem ---
+    db.serialize(() => {
+      db.run(`CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, email TEXT UNIQUE NOT NULL, senha TEXT NOT NULL, tipo TEXT NOT NULL, pontuacao_total INTEGER DEFAULT 0)`);
+      db.run(`CREATE TABLE IF NOT EXISTS penalidades (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, motivo TEXT NOT NULL, pontos_deduzidos INTEGER DEFAULT 0, data TEXT NOT NULL, FOREIGN KEY (aluno_id) REFERENCES usuarios (id))`);
+      db.run(`CREATE TABLE IF NOT EXISTS frequencia (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, data_falta TEXT NOT NULL, registrado_por_professor_id INTEGER, FOREIGN KEY (aluno_id) REFERENCES usuarios (id))`);
     });
-  }
-});
 
-// --- ROTAS ---
+    // --- ROTAS ---
 
-// Rota de teste
-app.get('/', (req, res) => {
-  res.send('Servidor funcionando e conectado ao banco de dados!');
-});
+    // Rota de teste
+    app.get('/', (req, res) => {
+      res.send('Servidor funcionando e conectado ao banco de dados!');
+    });
 
-// Rota para buscar a pontuação real de um usuário no banco
-app.get('/usuarios/:id/pontuacao', (req, res) => {
-  const usuarioId = req.params.id;
+    // Rota para buscar a pontuação real de um usuário no banco
+    app.get('/usuarios/:id/pontuacao', (req, res) => {
+      const usuarioId = req.params.id;
+      db.get(`SELECT nome, pontuacao_total FROM usuarios WHERE id = ?`, [usuarioId], (err, row) => {
+        if (err) { res.status(500).json({ erro: "Erro interno do servidor." }); }
+        else if (!row) { res.status(404).json({ erro: "Usuário não encontrado." }); }
+        else { res.json({ id: usuarioId, nome: row.nome, pontuacao_total: row.pontuacao_total }); }
+      });
+    });
 
-  db.get(
-    `SELECT nome, pontuacao_total FROM usuarios WHERE id = ?`,
-    [usuarioId],
-    (err, row) => {
-      if (err) {
-        console.error("Erro ao buscar pontuação:", err.message);
-        res.status(500).json({ erro: "Erro interno do servidor." });
-      } else if (!row) {
-        res.status(404).json({ erro: "Usuário não encontrado." });
-      } else {
-        res.json({
-          id: usuarioId,
-          nome: row.nome,
-          pontuacao_total: row.pontuacao_total
-        });
-      }
-    }
-  );
-});
-
-// Rota para buscar o ranking completo de pontuação
-app.get('/ranking', (req, res) => {
-  const query = `
-    SELECT nome, pontuacao_total
-    FROM usuarios
-    ORDER BY pontuacao_total DESC
-  `;
-
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      console.error("Erro ao buscar ranking:", err.message);
-      res.status(500).json({ erro: "Erro interno do servidor." });
-    } else if (rows.length === 0) {
-      res.status(404).json({ mensagem: "Nenhum usuário encontrado." });
-    } else {
-      // Adiciona a posição (1º, 2º, 3º...) para cada usuário
-      const ranking = rows.map((usuario, index) => ({
-        posicao: index + 1,
-        nome: usuario.nome,
-        pontuacao_total: usuario.pontuacao_total
-      }));
-
-      res.json(ranking);
-    }
-  });
-});
-
-// Rota para buscar o ranking de usuários
-app.get('/ranking', (req, res) => {
-  const sql = `
-    SELECT id, nome, pontuacao_total 
-    FROM usuarios 
-    ORDER BY pontuacao_total DESC
-  `;
-
-  // db.all busca por TODAS as linhas que correspondem à consulta
-  db.all(sql, [], (err, rows) => {
-    if (err) {
-      // Se der erro no banco de dados, retorna um erro 500
-      console.error("Erro ao buscar o ranking:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
+    // --- MODIFICAÇÃO 3: A rota duplicada foi removida, mantendo apenas esta ---
+    app.get('/ranking', (req, res) => {
+      const sql = `SELECT id, nome, pontuacao_total FROM usuarios ORDER BY pontuacao_total DESC`;
+      db.all(sql, [], (err, rows) => {
+        if (err) { return res.status(500).json({ error: err.message }); }
+        res.json({ ranking: rows });
+      });
+    });
     
-    // Se a consulta funcionou, retorna a lista de usuários em formato JSON
-    res.json({
-      ranking: rows
-    });
-  });
-});
-
-// Rota para adicionar (ou atualizar) a pontuação de um usuário
-app.post('/usuarios/:id/pontuacao', express.json(), (req, res) => {
-  const usuarioId = req.params.id;
-  const { pontos } = req.body; // Exemplo: { "pontos": 50 }
-
-  if (typeof pontos !== 'number') {
-    return res.status(400).json({ erro: "Campo 'pontos' deve ser um número." });
-  }
-
-  // Atualiza a pontuação total
-  const query = `
-    UPDATE usuarios
-    SET pontuacao_total = pontuacao_total + ?
-    WHERE id = ?
-  `;
-
-  db.run(query, [pontos, usuarioId], function (err) {
-    if (err) {
-      console.error("Erro ao atualizar pontuação:", err.message);
-      res.status(500).json({ erro: "Erro interno do servidor." });
-    } else if (this.changes === 0) {
-      res.status(404).json({ erro: "Usuário não encontrado." });
-    } else {
-      // Busca a nova pontuação atualizada
-      db.get(
-        `SELECT nome, pontuacao_total FROM usuarios WHERE id = ?`,
-        [usuarioId],
-        (err, row) => {
-          if (err) {
-            console.error("Erro ao buscar pontuação atualizada:", err.message);
-            res.status(500).json({ erro: "Erro ao buscar dados atualizados." });
-          } else {
-            res.json({
-              mensagem: "Pontuação atualizada com sucesso!",
-              id: usuarioId,
-              nome: row.nome,
-              pontuacao_total: row.pontuacao_total
-            });
-          }
+    // Rota para adicionar (ou atualizar) a pontuação de um usuário
+    app.post('/usuarios/:id/pontuacao', (req, res) => {
+        const usuarioId = req.params.id;
+        const { pontos } = req.body;
+        if (typeof pontos !== 'number') {
+            return res.status(400).json({ erro: "Campo 'pontos' deve ser um número." });
         }
-      );
-    }
-  });
-});
-
-// Rota para um aluno específico visualizar seu histórico de penalidades
-// Ex: http://localhost:3000/alunos/1/penalidades
-app.get('/alunos/:id/penalidades', (req, res) => {
-  const alunoId = req.params.id;
-  const sql = "SELECT motivo, pontos_deduzidos, data FROM penalidades WHERE aluno_id = ?";
-
-  // db.all busca por TODAS as penalidades do aluno específico
-  db.all(sql, [alunoId], (err, rows) => {
-    if (err) {
-      console.error("Erro ao buscar histórico de penalidades:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json({
-      historico: rows
+        const query = `UPDATE usuarios SET pontuacao_total = pontuacao_total + ? WHERE id = ?`;
+        db.run(query, [pontos, usuarioId], function (err) {
+            if (err) { res.status(500).json({ erro: "Erro interno do servidor." }); }
+            else if (this.changes === 0) { res.status(404).json({ erro: "Usuário não encontrado." }); }
+            else { res.json({ mensagem: "Pontuação atualizada com sucesso!" }); }
+        });
     });
-  });
-});
 
-// --- INICIAR SERVIDOR ---
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+    // Rota para um aluno específico visualizar seu histórico de penalidades
+    app.get('/alunos/:id/penalidades', (req, res) => {
+      const alunoId = req.params.id;
+      const sql = "SELECT motivo, pontos_deduzidos, data FROM penalidades WHERE aluno_id = ?";
+      db.all(sql, [alunoId], (err, rows) => {
+        if (err) { return res.status(500).json({ error: err.message }); }
+        res.json({ historico: rows });
+      });
+    });
+
+    // --- ADIÇÃO 5: A nova rota para registrar a falta ---
+    app.post('/registrar-falta', (req, res) => {
+        const { alunoId, dataFalta, professorId, pontosDeduzidos, motivo } = req.body;
+        const dataAtual = new Date().toISOString();
+        const sqlFrequencia = `INSERT INTO frequencia (aluno_id, data_falta, registrado_por_professor_id) VALUES (?, ?, ?)`;
+        db.run(sqlFrequencia, [alunoId, dataFalta, professorId], function (err) {
+            if (err) { return res.status(500).json({ error: `Erro ao registrar falta: ${err.message}` }); }
+            const sqlPenalidade = `INSERT INTO penalidades (aluno_id, motivo, pontos_deduzidos, data) VALUES (?, ?, ?, ?)`;
+            db.run(sqlPenalidade, [alunoId, motivo, pontosDeduzidos, dataAtual], function (err) {
+                if (err) { return res.status(500).json({ error: `Erro ao criar penalidade: ${err.message}` }); }
+                const sqlPontuacao = `UPDATE usuarios SET pontuacao_total = pontuacao_total - ? WHERE id = ?`;
+                db.run(sqlPontuacao, [pontosDeduzidos, alunoId], function(err) {
+                    if (err) { return res.status(500).json({ error: `Erro ao atualizar pontuação: ${err.message}`}); }
+                    res.status(201).json({ message: "Falta e penalidade registradas com sucesso!" });
+                });
+            });
+        });
+    });
+
+    // --- INICIAR SERVIDOR ---
+    // MODIFICAÇÃO 2 (continuação): O servidor só liga aqui no final, garantindo que tudo está pronto.
+    app.listen(PORT, () => {
+      console.log(`Servidor iniciado e rodando na porta ${PORT}. O terminal deve travar aqui.`);
+    });
+  }
 });
