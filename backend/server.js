@@ -160,7 +160,23 @@ app.post('/usuarios/:id/pontuacao', express.json(), (req, res) => {
   });
 });
 
+// Rota para um aluno específico visualizar seu histórico de penalidades
+// Ex: http://localhost:3000/alunos/1/penalidades
+app.get('/alunos/:id/penalidades', (req, res) => {
+  const alunoId = req.params.id;
+  const sql = "SELECT motivo, pontos_deduzidos, data FROM penalidades WHERE aluno_id = ?";
 
+  // db.all busca por TODAS as penalidades do aluno específico
+  db.all(sql, [alunoId], (err, rows) => {
+    if (err) {
+      console.error("Erro ao buscar histórico de penalidades:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({
+      historico: rows
+    });
+  });
+});
 
 // --- INICIAR SERVIDOR ---
 app.listen(PORT, () => {
