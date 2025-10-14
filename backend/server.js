@@ -23,6 +23,9 @@ const db = new sqlite3.Database('./banco.db', (err) => {
       db.run(`CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, email TEXT UNIQUE NOT NULL, senha TEXT NOT NULL, tipo TEXT NOT NULL, pontuacao_total INTEGER DEFAULT 0)`);
       db.run(`CREATE TABLE IF NOT EXISTS penalidades (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, motivo TEXT NOT NULL, pontos_deduzidos INTEGER DEFAULT 0, data TEXT NOT NULL, FOREIGN KEY (aluno_id) REFERENCES usuarios (id))`);
       db.run(`CREATE TABLE IF NOT EXISTS frequencia (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, data_falta TEXT NOT NULL, registrado_por_professor_id INTEGER, FOREIGN KEY (aluno_id) REFERENCES usuarios (id))`);
+      // Adicionado para garantir que as tabelas de desafio também existam
+      db.run(`CREATE TABLE IF NOT EXISTS desafios (id INTEGER PRIMARY KEY AUTOINCREMENT, titulo TEXT NOT NULL, descricao TEXT, pontos INTEGER NOT NULL, prazo_final TEXT, criado_por_professor_id INTEGER, FOREIGN KEY (criado_por_professor_id) REFERENCES usuarios (id))`);
+      db.run(`CREATE TABLE IF NOT EXISTS aluno_desafios (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, desafio_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pendente', data_conclusao TEXT, FOREIGN KEY (aluno_id) REFERENCES usuarios (id), FOREIGN KEY (desafio_id) REFERENCES desafios (id))`);
     });
 
     // --- ROTAS ---
@@ -95,53 +98,35 @@ const db = new sqlite3.Database('./banco.db', (err) => {
         });
     });
 
-// Rota para verificar e aplicar penalidades por tarefas atrasadas
-app.get('/verificar-atrasos', (req, res) => {
-    const sqlBuscaAtrasos = `
-        SELECT 
-            ad.id as aluno_desafio_id,
-            ad.aluno_id,
-            d.titulo as desafio_titulo
-        FROM aluno_desafios ad
-        JOIN desafios d ON ad.desafio_id = d.id
-        WHERE ad.status = 'pendente' AND d.prazo_final < DATE('now')
-    `;
-
-    db.all(sqlBuscaAtrasos, [], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: `Erro ao buscar tarefas atrasadas: ${err.message}` });
-        }
-        if (rows.length === 0) {
-            return res.json({ message: "Nenhuma tarefa atrasada encontrada." });
-        }
-
-        let penalidadesAplicadas = 0;
-        rows.forEach(tarefa => {
-            const pontosDeduzidos = 20; // Penalidade fixa por atraso
-            // --- ESTA É A LINHA DA CORREÇÃO PRINCIPAL ---
-            const motivo = `Atraso na entrega do desafio: ${tarefa.desafio_titulo}`;
-            const dataAtual = new Date().toISOString();
-
-            db.serialize(() => {
-                const sqlPenalidade = `INSERT INTO penalidades (aluno_id, motivo, pontos_deduzidos, data) VALUES (?, ?, ?, ?)`;
-                db.run(sqlPenalidade, [tarefa.aluno_id, motivo, pontosDeduzidos, dataAtual]);
-
-                const sqlPontuacao = `UPDATE usuarios SET pontuacao_total = pontuacao_total - ? WHERE id = ?`;
-                db.run(sqlPontuacao, [pontosDeduzidos, tarefa.aluno_id]);
-
-                const sqlStatusDesafio = `UPDATE aluno_desafios SET status = 'atrasado' WHERE id = ?`;
-                db.run(sqlStatusDesafio, [tarefa.aluno_desafio_id]);
-                
-                penalidadesAplicadas++;
+    // Rota para verificar e aplicar penalidades por tarefas atrasadas
+    app.get('/verificar-atrasos', (req, res) => {
+        const sqlBuscaAtrasos = `
+            SELECT 
+                ad.id as aluno_desafio_id,
+                ad.aluno_id,
+                d.titulo as desafio_titulo
+            FROM aluno_desafios ad
+            JOIN desafios d ON ad.desafio_id = d.id
+            WHERE ad.status = 'pendente' AND d.prazo_final < DATE('now')
+        `;
+        db.all(sqlBuscaAtrasos, [], (err, rows) => {
+            if (err) { return res.status(500).json({ error: `Erro ao buscar tarefas atrasadas: ${err.message}` }); }
+            if (rows.length === 0) { return res.json({ message: "Nenhuma tarefa atrasada encontrada." }); }
+            rows.forEach(tarefa => {
+                const pontosDeduzidos = 20;
+                const motivo = `Atraso na entrega do desafio: ${tarefa.desafio_titulo}`;
+                const dataAtual = new Date().toISOString();
+                db.serialize(() => {
+                    db.run(`INSERT INTO penalidades (aluno_id, motivo, pontos_deduzidos, data) VALUES (?, ?, ?, ?)`, [tarefa.aluno_id, motivo, pontosDeduzidos, dataAtual]);
+                    db.run(`UPDATE usuarios SET pontuacao_total = pontuacao_total - ? WHERE id = ?`, [pontosDeduzidos, tarefa.aluno_id]);
+                    db.run(`UPDATE aluno_desafios SET status = 'atrasado' WHERE id = ?`, [tarefa.aluno_desafio_id]);
+                });
             });
+            res.json({ message: `Verificação concluída. ${rows.length} penalidade(s) aplicada(s).` });
         });
-
-        res.json({ message: `Verificação concluída. ${penalidadesAplicadas} penalidade(s) aplicada(s).` });
     });
-});
 
     // --- INICIAR SERVIDOR ---
-    // MODIFICAÇÃO 2 (continuação): O servidor só liga aqui no final, garantindo que tudo está pronto.
     app.listen(PORT, () => {
       console.log(`Servidor iniciado e rodando na porta ${PORT}. O terminal deve travar aqui.`);
     });
