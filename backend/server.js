@@ -1,41 +1,31 @@
-// Importar os pacotes
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 
-// Criar a aplicação Express
 const app = express();
 
-// --- ADIÇÃO 1: Habilitar o Servidor para Receber JSON ---
 app.use(express.json());
 
-// Definir a porta
 const PORT = 3000;
-
-// --- MODIFICAÇÃO 2: A estrutura inteira foi movida para DENTRO da conexão ---
 const db = new sqlite3.Database('./banco.db', (err) => {
   if (err) {
     console.error("Erro ao conectar ao banco de dados:", err.message);
   } else {
     console.log("Conectado ao banco de dados 'banco.db' com sucesso.");
     
-    // --- ADIÇÃO 4: Garantir que TODAS as tabelas existam em ordem ---
     db.serialize(() => {
       db.run(`CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, email TEXT UNIQUE NOT NULL, senha TEXT NOT NULL, tipo TEXT NOT NULL, pontuacao_total INTEGER DEFAULT 0)`);
       db.run(`CREATE TABLE IF NOT EXISTS penalidades (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, motivo TEXT NOT NULL, pontos_deduzidos INTEGER DEFAULT 0, data TEXT NOT NULL, FOREIGN KEY (aluno_id) REFERENCES usuarios (id))`);
       db.run(`CREATE TABLE IF NOT EXISTS frequencia (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, data_falta TEXT NOT NULL, registrado_por_professor_id INTEGER, FOREIGN KEY (aluno_id) REFERENCES usuarios (id))`);
-      // Adicionado para garantir que as tabelas de desafio também existam
       db.run(`CREATE TABLE IF NOT EXISTS desafios (id INTEGER PRIMARY KEY AUTOINCREMENT, titulo TEXT NOT NULL, descricao TEXT, pontos INTEGER NOT NULL, prazo_final TEXT, criado_por_professor_id INTEGER, FOREIGN KEY (criado_por_professor_id) REFERENCES usuarios (id))`);
       db.run(`CREATE TABLE IF NOT EXISTS aluno_desafios (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, desafio_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pendente', data_conclusao TEXT, FOREIGN KEY (aluno_id) REFERENCES usuarios (id), FOREIGN KEY (desafio_id) REFERENCES desafios (id))`);
     });
 
     // --- ROTAS ---
-
-    // Rota de teste
     app.get('/', (req, res) => {
       res.send('Servidor funcionando e conectado ao banco de dados!');
     });
 
-    // Rota para buscar a pontuação real de um usuário no banco
+    // Rota pontuação real
     app.get('/usuarios/:id/pontuacao', (req, res) => {
       const usuarioId = req.params.id;
       db.get(`SELECT nome, pontuacao_total FROM usuarios WHERE id = ?`, [usuarioId], (err, row) => {
@@ -45,7 +35,6 @@ const db = new sqlite3.Database('./banco.db', (err) => {
       });
     });
 
-    // --- MODIFICAÇÃO 3: A rota duplicada foi removida, mantendo apenas esta ---
     app.get('/ranking', (req, res) => {
       const sql = `SELECT id, nome, pontuacao_total FROM usuarios ORDER BY pontuacao_total DESC`;
       db.all(sql, [], (err, rows) => {
@@ -54,7 +43,7 @@ const db = new sqlite3.Database('./banco.db', (err) => {
       });
     });
     
-    // Rota para adicionar (ou atualizar) a pontuação de um usuário
+    // Rota adicionar a pontuação do usuário
     app.post('/usuarios/:id/pontuacao', (req, res) => {
         const usuarioId = req.params.id;
         const { pontos } = req.body;
@@ -69,7 +58,7 @@ const db = new sqlite3.Database('./banco.db', (err) => {
         });
     });
 
-    // Rota para um aluno específico visualizar seu histórico de penalidades
+    // Rota verificação de penalidades
     app.get('/alunos/:id/penalidades', (req, res) => {
       const alunoId = req.params.id;
       const sql = "SELECT motivo, pontos_deduzidos, data FROM penalidades WHERE aluno_id = ?";
@@ -79,7 +68,6 @@ const db = new sqlite3.Database('./banco.db', (err) => {
       });
     });
 
-    // --- ADIÇÃO 5: A nova rota para registrar a falta ---
     app.post('/registrar-falta', (req, res) => {
         const { alunoId, dataFalta, professorId, pontosDeduzidos, motivo } = req.body;
         const dataAtual = new Date().toISOString();
@@ -98,7 +86,7 @@ const db = new sqlite3.Database('./banco.db', (err) => {
         });
     });
 
-    // Rota para verificar e aplicar penalidades por tarefas atrasadas
+    // Rota aplicação de penalidades por tarefas atrasadas
     app.get('/verificar-atrasos', (req, res) => {
         const sqlBuscaAtrasos = `
             SELECT 
@@ -126,9 +114,9 @@ const db = new sqlite3.Database('./banco.db', (err) => {
         });
     });
 
-    // --- INICIAR SERVIDOR ---
+
     app.listen(PORT, () => {
-      console.log(`Servidor iniciado e rodando na porta ${PORT}. O terminal deve travar aqui.`);
+      console.log(`Servidor iniciado e rodando na porta ${PORT}.`);
     });
   }
 });
