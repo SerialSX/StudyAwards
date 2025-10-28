@@ -1,8 +1,10 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors');
 
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 
 const PORT = 3000;
@@ -119,4 +121,63 @@ const db = new sqlite3.Database('./banco.db', (err) => {
       console.log(`Servidor iniciado e rodando na porta ${PORT}.`);
     });
   }
+});
+
+app.post('/api/cadastro', (req, res) => {
+  const { nome, email, senha, tipo } = req.body;
+
+  if (!nome || !email || !senha || !tipo) {
+    return res.status(400).json({ erro: "Todos os campos são obrigatórios." });
+  }
+
+  const sql = `INSERT INTO usuarios (nome, email, senha, tipo) VALUES (?, ?, ?, ?)`;
+
+  db.run(sql, [nome, email, senha, tipo], function(err) {
+    if (err) {
+      console.error(err.message);
+      return res.status(500).json({ erro: "Erro ao cadastrar usuário. O email pode já estar em uso." });
+    }
+
+    res.status(201).json({
+      id: this.lastID,
+      nome: nome,
+      email: email,
+      tipo: tipo
+    });
+  });
+});
+
+app.post('/api/login', (req, res) => {
+  const { email, senha } = req.body;
+
+  if (!email || !senha) {
+    return res.status(400).json({ erro: "Email e senha são obrigatórios." });
+  }
+
+  const sql = `SELECT * FROM usuarios WHERE email = ?`;
+
+  db.get(sql, [email], (err, row) => {
+    if (err) {
+      return res.status(500).json({ erro: "Erro interno do servidor." });
+    }
+
+    if (!row) {
+      return res.status(404).json({ erro: "Email não encontrado." });
+    }
+
+    if (row.senha !== senha) {
+      return res.status(401).json({ erro: "Senha incorreta." });
+    }
+
+    res.json({
+      message: "Login bem-sucedido!",
+      usuario: {
+        id: row.id,
+        nome: row.nome,
+        email: row.email,
+        tipo: row.tipo,
+        pontuacao_total: row.pontuacao_total
+      }
+    });
+  });
 });
