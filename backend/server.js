@@ -123,6 +123,45 @@ const db = new sqlite3.Database('./banco.db', (err) => {
   }
 });
 
+// --- NOVA ROTA PARA LISTAR DESAFIOS DO ALUNO ---
+app.get('/api/desafios', (req, res) => {
+  // De onde pegar o ID do aluno? 
+  // O frontend precisará enviar o ID do aluno logado.
+  // Por enquanto, vamos pegar de um "query parameter" na URL, ex: /api/desafios?alunoId=14
+  const alunoId = req.query.alunoId;
+
+  if (!alunoId) {
+    return res.status(400).json({ erro: "ID do aluno é obrigatório (ex: /api/desafios?alunoId=1)" });
+  }
+
+  // SQL para buscar os desafios ATRIBUÍDOS a este aluno e os detalhes do desafio
+  const sql = `
+    SELECT 
+      d.id, 
+      d.titulo, 
+      d.descricao, 
+      d.pontos, 
+      d.prazo_final,
+      ad.status,
+      ad.data_conclusao,
+      ad.id as aluno_desafio_id -- ID da LIGAÇÃO entre aluno e desafio
+    FROM desafios d 
+    JOIN aluno_desafios ad ON d.id = ad.desafio_id 
+    WHERE ad.aluno_id = ?
+  `;
+
+  // Executa a busca no banco
+  db.all(sql, [alunoId], (err, rows) => {
+    if (err) {
+      console.error("Erro ao buscar desafios do aluno:", err.message);
+      return res.status(500).json({ erro: "Erro ao buscar desafios." });
+    }
+
+    // Retorna a lista de desafios encontrados para aquele aluno
+    res.json({ desafios: rows });
+  });
+});
+
 app.post('/api/cadastro', (req, res) => {
   const { nome, email, senha, tipo } = req.body;
 
