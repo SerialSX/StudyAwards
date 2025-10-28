@@ -1,73 +1,122 @@
-// Importar os pacotes
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose(); // .verbose() nos dá mais informações no console
+const sqlite3 = require('sqlite3').verbose();
 
-// Criar a aplicação Express
 const app = express();
 
-// Definir a porta
+app.use(express.json());
+
 const PORT = 3000;
-
-// --- NOVO CÓDIGO DO BANCO DE DADOS ---
-
-// Conectar ao banco de dados SQLite
-// Se o arquivo 'banco.db' não existir, ele será criado.
 const db = new sqlite3.Database('./banco.db', (err) => {
   if (err) {
-    // Erro ao conectar
     console.error("Erro ao conectar ao banco de dados:", err.message);
   } else {
-    // Conexão bem-sucedida
     console.log("Conectado ao banco de dados 'banco.db' com sucesso.");
     
-    // Criar a tabela de usuários (se ela não existir)
-    // Usamos 'db.run' para executar comandos SQL que não retornam dados
-    db.run(`CREATE TABLE IF NOT EXISTS usuarios (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      senha TEXT NOT NULL,
-      tipo TEXT NOT NULL
-    )`, (err) => {
-      if (err) {
-        // Erro ao criar a tabela
-        console.error("Erro ao criar a tabela 'usuarios':", err.message);
-      } else {
-        // Tabela criada ou já existente
-        console.log("Tabela 'usuarios' pronta para uso.");
-      }
+    db.serialize(() => {
+      db.run(`CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, email TEXT UNIQUE NOT NULL, senha TEXT NOT NULL, tipo TEXT NOT NULL, pontuacao_total INTEGER DEFAULT 0)`);
+      db.run(`CREATE TABLE IF NOT EXISTS penalidades (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, motivo TEXT NOT NULL, pontos_deduzidos INTEGER DEFAULT 0, data TEXT NOT NULL, FOREIGN KEY (aluno_id) REFERENCES usuarios (id))`);
+      db.run(`CREATE TABLE IF NOT EXISTS frequencia (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, data_falta TEXT NOT NULL, registrado_por_professor_id INTEGER, FOREIGN KEY (aluno_id) REFERENCES usuarios (id))`);
+      db.run(`CREATE TABLE IF NOT EXISTS desafios (id INTEGER PRIMARY KEY AUTOINCREMENT, titulo TEXT NOT NULL, descricao TEXT, pontos INTEGER NOT NULL, prazo_final TEXT, criado_por_professor_id INTEGER, FOREIGN KEY (criado_por_professor_id) REFERENCES usuarios (id))`);
+      db.run(`CREATE TABLE IF NOT EXISTS aluno_desafios (id INTEGER PRIMARY KEY AUTOINCREMENT, aluno_id INTEGER NOT NULL, desafio_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pendente', data_conclusao TEXT, FOREIGN KEY (aluno_id) REFERENCES usuarios (id), FOREIGN KEY (desafio_id) REFERENCES desafios (id))`);
+    });
+
+    // --- ROTAS ---
+    app.get('/', (req, res) => {
+      res.send('Servidor funcionando e conectado ao banco de dados!');
+    });
+
+    // Rota pontuação real
+    app.get('/usuarios/:id/pontuacao', (req, res) => {
+      const usuarioId = req.params.id;
+      db.get(`SELECT nome, pontuacao_total FROM usuarios WHERE id = ?`, [usuarioId], (err, row) => {
+        if (err) { res.status(500).json({ erro: "Erro interno do servidor." }); }
+        else if (!row) { res.status(404).json({ erro: "Usuário não encontrado." }); }
+        else { res.json({ id: usuarioId, nome: row.nome, pontuacao_total: row.pontuacao_total }); }
+      });
+    });
+
+    app.get('/ranking', (req, res) => {
+      const sql = `SELECT id, nome, pontuacao_total FROM usuarios ORDER BY pontuacao_total DESC`;
+      db.all(sql, [], (err, rows) => {
+        if (err) { return res.status(500).json({ error: err.message }); }
+        res.json({ ranking: rows });
+      });
+    });
+    
+    // Rota adicionar a pontuação do usuário
+    app.post('/usuarios/:id/pontuacao', (req, res) => {
+        const usuarioId = req.params.id;
+        const { pontos } = req.body;
+        if (typeof pontos !== 'number') {
+            return res.status(400).json({ erro: "Campo 'pontos' deve ser um número." });
+        }
+        const query = `UPDATE usuarios SET pontuacao_total = pontuacao_total + ? WHERE id = ?`;
+        db.run(query, [pontos, usuarioId], function (err) {
+            if (err) { res.status(500).json({ erro: "Erro interno do servidor." }); }
+            else if (this.changes === 0) { res.status(404).json({ erro: "Usuário não encontrado." }); }
+            else { res.json({ mensagem: "Pontuação atualizada com sucesso!" }); }
+        });
+    });
+
+    // Rota verificação de penalidades
+    app.get('/alunos/:id/penalidades', (req, res) => {
+      const alunoId = req.params.id;
+      const sql = "SELECT motivo, pontos_deduzidos, data FROM penalidades WHERE aluno_id = ?";
+      db.all(sql, [alunoId], (err, rows) => {
+        if (err) { return res.status(500).json({ error: err.message }); }
+        res.json({ historico: rows });
+      });
+    });
+
+    app.post('/registrar-falta', (req, res) => {
+        const { alunoId, dataFalta, professorId, pontosDeduzidos, motivo } = req.body;
+        const dataAtual = new Date().toISOString();
+        const sqlFrequencia = `INSERT INTO frequencia (aluno_id, data_falta, registrado_por_professor_id) VALUES (?, ?, ?)`;
+        db.run(sqlFrequencia, [alunoId, dataFalta, professorId], function (err) {
+            if (err) { return res.status(500).json({ error: `Erro ao registrar falta: ${err.message}` }); }
+            const sqlPenalidade = `INSERT INTO penalidades (aluno_id, motivo, pontos_deduzidos, data) VALUES (?, ?, ?, ?)`;
+            db.run(sqlPenalidade, [alunoId, motivo, pontosDeduzidos, dataAtual], function (err) {
+                if (err) { return res.status(500).json({ error: `Erro ao criar penalidade: ${err.message}` }); }
+                const sqlPontuacao = `UPDATE usuarios SET pontuacao_total = pontuacao_total - ? WHERE id = ?`;
+                db.run(sqlPontuacao, [pontosDeduzidos, alunoId], function(err) {
+                    if (err) { return res.status(500).json({ error: `Erro ao atualizar pontuação: ${err.message}`}); }
+                    res.status(201).json({ message: "Falta e penalidade registradas com sucesso!" });
+                });
+            });
+        });
+    });
+
+    // Rota aplicação de penalidades por tarefas atrasadas
+    app.get('/verificar-atrasos', (req, res) => {
+        const sqlBuscaAtrasos = `
+            SELECT 
+                ad.id as aluno_desafio_id,
+                ad.aluno_id,
+                d.titulo as desafio_titulo
+            FROM aluno_desafios ad
+            JOIN desafios d ON ad.desafio_id = d.id
+            WHERE ad.status = 'pendente' AND d.prazo_final < DATE('now')
+        `;
+        db.all(sqlBuscaAtrasos, [], (err, rows) => {
+            if (err) { return res.status(500).json({ error: `Erro ao buscar tarefas atrasadas: ${err.message}` }); }
+            if (rows.length === 0) { return res.json({ message: "Nenhuma tarefa atrasada encontrada." }); }
+            rows.forEach(tarefa => {
+                const pontosDeduzidos = 20;
+                const motivo = `Atraso na entrega do desafio: ${tarefa.desafio_titulo}`;
+                const dataAtual = new Date().toISOString();
+                db.serialize(() => {
+                    db.run(`INSERT INTO penalidades (aluno_id, motivo, pontos_deduzidos, data) VALUES (?, ?, ?, ?)`, [tarefa.aluno_id, motivo, pontosDeduzidos, dataAtual]);
+                    db.run(`UPDATE usuarios SET pontuacao_total = pontuacao_total - ? WHERE id = ?`, [pontosDeduzidos, tarefa.aluno_id]);
+                    db.run(`UPDATE aluno_desafios SET status = 'atrasado' WHERE id = ?`, [tarefa.aluno_desafio_id]);
+                });
+            });
+            res.json({ message: `Verificação concluída. ${rows.length} penalidade(s) aplicada(s).` });
+        });
+    });
+
+
+    app.listen(PORT, () => {
+      console.log(`Servidor iniciado e rodando na porta ${PORT}.`);
     });
   }
-});
-
-// --- FIM DO NOVO CÓDIGO ---
-
-
-// Rota de teste
-app.get('/', (req, res) => {
-  res.send('Servidor funcionando e conectado ao banco de dados!');
-});
-
-// --- NOVA ROTA ADICIONADA AQUI ---
-// Rota para buscar a pontuação de um usuário (exemplo)
-// No navegador, acesse: http://localhost:3000/usuarios/1/pontuacao
-app.get('/usuarios/:id/pontuacao', (req, res) => {
-  const usuarioId = req.params.id;
-
-  // POR ENQUANTO: Retornamos um valor fixo (mockado)
-  // NO FUTURO: Aqui buscaremos no banco de dados de verdade usando o usuarioId
-  const pontuacaoMockada = 150;
-
-  // Enviamos a resposta em formato JSON
-  res.json({
-    usuarioId: usuarioId,
-    pontuacao: pontuacaoMockada
-  });
-});
-// --- FIM DA NOVA ROTA ---
-
-
-// Iniciar o servidor
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
 });
